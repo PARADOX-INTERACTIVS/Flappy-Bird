@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Flappy Bird</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #87ceeb;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    canvas {
+      background: #87ceeb;
+      border: 2px solid #333;
+      margin-top: 10px;
+    }
+    .ui {
+      margin-top: 10px;
+      display: flex;
+      gap: 10px;
+    }
+    button {
+      padding: 8px 14px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .scoreboard {
+      margin-top: 10px;
+      font-size: 18px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h2>🐦 Flappy Bird</h2>
+  <div class="scoreboard">
+    Score: <span id="score">0</span> | High Score: <span id="highScore">0</span>
+  </div>
+  <canvas id="game" width="400" height="500"></canvas>
+  <div class="ui">
+    <button id="startBtn">Start</button>
+    <button id="restartBtn">Restart</button>
+    <button id="resetHighBtn">Reset High Score</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+
+    const scoreEl = document.getElementById("score");
+    const highScoreEl = document.getElementById("highScore");
+
+    let bird, pipes, score, gameOver, frame;
+    let highScore = Number(localStorage.getItem("flappyHighScore")) || 0;
+
+    let showRecordBanner = false;
+    let showNearBanner = false;
+    let recordAlreadyBroken = false;
+
+    let pause = false;
+    let pauseTimer = 0;
+
+    // start / countdown states
+    let gameStarted = false;
+    let countingDown = false;
+    let countdown = 3;
+
+    highScoreEl.textContent = highScore;
+
+    function init(showStart = true) {
+      bird = {
+        x: 80,
+        y: 250,
+        radius: 12,
+        velocity: 0,
+        gravity: 0.6,
+        lift: -9
+      };
+
+      pipes = [];
+      score = 0;
+      frame = 0;
+      gameOver = false;
+
+      showRecordBanner = false;
+      showNearBanner = false;
+      recordAlreadyBroken = false;
+
+      pause = false;
+      pauseTimer = 0;
+
+      if (showStart) {
+        gameStarted = false;
+        countingDown = false;
+        countdown = 3;
+      } else {
+        gameStarted = true;
+        countingDown = false;
+      }
+
+      scoreEl.textContent = score;
+    }
+
+    function startGame() {
+      if (gameStarted || countingDown) return;
+      countingDown = true;
+      countdown = 3;
+
+      const interval = setInterval(() => {
+        countdown--;
+        if (countdown <= 0) {
+          clearInterval(interval);
+          countingDown = false;
+          gameStarted = true;
+          addPipe();
+        }
+      }, 1000);
+    }
+
+    function addPipe() {
+      const gap = 140;
+      const top = Math.random() * 180 + 40;
+      pipes.push({ x: canvas.width, top, bottom: top + gap, width: 55, passed: false });
+    }
+
+    function update() {
+      if (!gameStarted || gameOver) return;
+
+      if (pause) {
+        pauseTimer--;
+        if (pauseTimer <= 0) {
+          pause = false;
+          showRecordBanner = false;
+          showNearBanner = false;
+        }
+        return;
+      }
+
+      frame++;
+      bird.velocity += bird.gravity;
+      bird.y += bird.velocity;
+
+      if (frame % 100 === 0) addPipe();
+
+      pipes.forEach(p => {
+        p.x -= 2.5;
+
+        if (!p.passed && p.x + p.width < bird.x) {
+          p.passed = true;
+          score++;
+          scoreEl.textContent = score;
+
+          if (score > highScore && !recordAlreadyBroken) {
+            recordAlreadyBroken = true;
+            showRecordBanner = true;
+            pause = true;
+            pauseTimer = 300;
+          }
+        }
+
+        if (
+          bird.x + bird.radius > p.x &&
+          bird.x - bird.radius < p.x + p.width &&
+          (bird.y - bird.radius < p.top || bird.y + bird.radius > p.bottom)
+        ) {
+          endGame();
+        }
+      });
+
+      pipes = pipes.filter(p => p.x + p.width > 0);
+
+      if (bird.y + bird.radius > canvas.height || bird.y - bird.radius < 0) {
+        endGame();
+      }
+    }
+
+    function endGame() {
+      if (gameOver) return;
+      gameOver = true;
+
+      if (score === highScore && highScore > 0 && !recordAlreadyBroken) {
+        showNearBanner = true;
+        pause = true;
+        pauseTimer = 120;
+      }
+
+      if (score > highScore) {
+        highScore = score;
+        localStorage.setItem("flappyHighScore", highScore);
+        highScoreEl.textContent = highScore;
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      drawPipes();
+      drawBird();
+
+      if (!gameStarted && !countingDown) {
+        ctx.fillStyle = "rgba(0,0,0,0.6)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#fff";
+        ctx.font = "26px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("CLICK START", canvas.width / 2, canvas.height / 2);
+      }
+
+      if (countingDown) {
+        ctx.fillStyle = "rgba(0,0,0,0.6)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 60px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(countdown, canvas.width / 2, canvas.height / 2);
+      }
+
+      if (showRecordBanner) {
+        ctx.fillStyle = "rgba(0,0,0,0.75)";
+        ctx.fillRect(0, 165, canvas.width, 110);
+        ctx.fillStyle = "#ffd700";
+        ctx.font = "bold 22px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("🏆 CONGRATULATIONS 🏆", canvas.width / 2, 205);
+        ctx.font = "bold 18px Arial";
+        ctx.fillText("YOU BROKE THE HIGHEST RECORD", canvas.width / 2, 240);
+      }
+
+      if (showNearBanner) {
+        ctx.fillStyle = "rgba(0,0,0,0.75)";
+        ctx.fillRect(0, 165, canvas.width, 110);
+        ctx.fillStyle = "#ff7675";
+        ctx.font = "bold 22px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("😣 SO CLOSE! 😣", canvas.width / 2, 205);
+        ctx.font = "bold 18px Arial";
+        ctx.fillText("YOU WERE NEAR THE HIGH SCORE", canvas.width / 2, 240);
+      }
+    }
+
+    function drawBird() {
+      ctx.save();
+      ctx.translate(bird.x, bird.y);
+      ctx.scale(-1, 1); // mirror horizontally
+      ctx.font = "26px serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("🐦", 0, 0);
+      ctx.restore();
+    }
+
+    function drawPipes() {
+      ctx.fillStyle = "#2ecc71";
+      pipes.forEach(p => {
+        ctx.fillRect(p.x, 0, p.width, p.top);
+        ctx.fillRect(p.x, p.bottom, p.width, canvas.height - p.bottom);
+      });
+    }
+
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    document.addEventListener("keydown", e => {
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (gameStarted && !pause && !gameOver) bird.velocity = bird.lift;
+      }
+    });
+
+    canvas.addEventListener("click", () => {
+      if (gameStarted && !pause && !gameOver) bird.velocity = bird.lift;
+    });
+
+    document.getElementById("startBtn").onclick = startGame;
+    document.getElementById("restartBtn").onclick = () => init(false);
+
+    document.getElementById("resetHighBtn").onclick = () => {
+      highScore = 0;
+      localStorage.removeItem("flappyHighScore");
+      highScoreEl.textContent = 0;
+    };
+
+    init();
+    loop();
+  </script>
+</body>
+</html>
